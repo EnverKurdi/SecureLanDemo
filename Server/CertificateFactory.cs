@@ -1,3 +1,4 @@
+using System.IO;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
@@ -7,6 +8,12 @@ public static class CertificateFactory
 {
     public static X509Certificate2 CreateSelfSigned(string subjectName)
     {
+        var pfxPath = Path.Combine(AppContext.BaseDirectory, "certs", "server.pfx");
+        if (File.Exists(pfxPath))
+        {
+            return new X509Certificate2(pfxPath, (string?)null, X509KeyStorageFlags.Exportable);
+        }
+
         using var rsa = RSA.Create(2048);
         var req = new CertificateRequest(
             subjectName,

@@ -37,7 +37,7 @@ public sealed class HsmServer
     private static async Task HandleClientAsync(TcpClient client, CancellationToken ct)
     {
         Console.WriteLine("[HSM] Server received connection from AppServer.");
-        await using var _ = client;
+        using var _ = client;
         await using var stream = client.GetStream();
 
         try
@@ -69,7 +69,7 @@ public sealed class HsmServer
                     await WireProtocol.WriteBytesAsync(stream, wrapped.Ciphertext, ct);
                     await WireProtocol.WriteBytesAsync(stream, wrapped.Tag, ct);
 
-                    Console.WriteLine("[HSM] Wrapped a DEK (returned wrapped key blob).");
+                    Console.WriteLine("[HSM] DEK wrapped with KEK (returned wrapped key blob).");
                     continue;
                 }
 
@@ -84,7 +84,7 @@ public sealed class HsmServer
                     await WireProtocol.WriteBoolAsync(stream, true, ct);
                     await WireProtocol.WriteBytesAsync(stream, dek, ct);
 
-                    Console.WriteLine("[HSM] Unwrapped a DEK (returned plaintext DEK to AppServer).");
+                    Console.WriteLine("[HSM] DEK unwrapped with KEK (returned plaintext DEK to AppServer).");
 
                     // Bemærk: AppServer er ansvarlig for at zero’e DEK efter brug.
                     continue;

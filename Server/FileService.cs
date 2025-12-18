@@ -32,6 +32,7 @@ public sealed class FileService
         // 3) Wrap DEK i HSM med KEK
         Console.WriteLine("[SERVER] Calling HSM to WRAP DEK (KEK never leaves HSM)...");
         var wrapped = await _hsm.WrapKeyAsync(dek, ct);
+        Console.WriteLine("[SERVER] DEK wrapped by HSM (KEK protected).");
 
         // 4) Slet DEK fra RAM ASAP
         CryptographicOperations.ZeroMemory(dek);
@@ -54,6 +55,7 @@ public sealed class FileService
 
         Console.WriteLine("[SERVER] Saving EncryptedContent + WrappedDEK to DataStore (no plaintext, no DEK stored).");
         var fileId = await _data.SaveAsync(record, ct);
+        Console.WriteLine("[SERVER] Ciphertext stored at rest in DataStore.");
         return fileId;
     }
 
@@ -67,6 +69,7 @@ public sealed class FileService
         // 1) Unwrap DEK via HSM
         Console.WriteLine("[SERVER] Calling HSM to UNWRAP DEK...");
         var dek = await _hsm.UnwrapKeyAsync(record.WrappedDekNonce, record.WrappedDek, record.WrappedDekTag, ct);
+        Console.WriteLine("[SERVER] DEK unwrapped by HSM (KEK still sealed).");
 
         // 2) Dekrypter indhold i RAM
         Console.WriteLine("[SERVER] Decrypting file in RAM with DEK...");

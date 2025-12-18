@@ -29,9 +29,10 @@ public sealed class ClientApplication
 
         await ssl.AuthenticateAsClientAsync("SecureLanDemo-Server");
 
-        Console.WriteLine("[CLIENT] TLS established (Secure in Transit).");
+        Console.WriteLine("[CLIENT] TLS OK (Secure in Transit).");
 
         // Login
+        string? currentUser = null;
         Console.Write("Username: ");
         var user = Console.ReadLine() ?? "";
         Console.Write("Password: ");
@@ -50,11 +51,12 @@ public sealed class ClientApplication
         }
 
         var group = await WireProtocol.ReadStringAsync(ssl, ct);
+        currentUser = user;
         var folderCount = await WireProtocol.ReadInt32Async(ssl, ct);
         var folders = new List<string>();
         for (int i = 0; i < folderCount; i++) folders.Add(await WireProtocol.ReadStringAsync(ssl, ct));
 
-        Console.WriteLine($"[CLIENT] Login OK. Group={group}");
+        Console.WriteLine($"[CLIENT user={currentUser}] Login OK. Group={group}");
         Console.WriteLine($"[CLIENT] Allowed folders: {string.Join(", ", folders)}");
 
         while (true)
@@ -62,8 +64,9 @@ public sealed class ClientApplication
             Console.WriteLine();
             Console.WriteLine("1) List files");
             Console.WriteLine("2) Upload file");
-            Console.WriteLine("3) Download file");
-            Console.WriteLine("4) Exit");
+            Console.WriteLine("3) Upload file from disk");
+            Console.WriteLine("4) Download file to disk");
+            Console.WriteLine("5) Exit");
             Console.Write("> ");
             var choice = Console.ReadLine()?.Trim();
 
@@ -108,10 +111,13 @@ public sealed class ClientApplication
 
                 var bytes = System.Text.Encoding.UTF8.GetBytes(content);
 
+                var actor = currentUser ?? "unknown";
+                Console.WriteLine($"[CLIENT user={actor}] Sending file over TLS (encrypted in transit) -> folder={folder}, name={fileName}, bytes={bytes.Length}");
                 await WireProtocol.WriteStringAsync(ssl, "UPLOAD", ct);
                 await WireProtocol.WriteStringAsync(ssl, folder, ct);
                 await WireProtocol.WriteStringAsync(ssl, fileName, ct);
                 await WireProtocol.WriteBytesAsync(ssl, bytes, ct);
+                Console.WriteLine($"[CLIENT user={actor}] Upload payload sent over TLS.");
 
                 var uok = await WireProtocol.ReadBoolAsync(ssl, ct);
                 var umsg = await WireProtocol.ReadStringAsync(ssl, ct);
@@ -122,15 +128,55 @@ public sealed class ClientApplication
                 }
 
                 var fileId = await WireProtocol.ReadStringAsync(ssl, ct);
-                Console.WriteLine($"[CLIENT] Upload OK. fileId={fileId}");
+                Console.WriteLine($"[CLIENT user={actor}] Upload OK. fileId={fileId}");
                 continue;
             }
 
             if (choice == "3")
             {
+                Console.Write("Local file path: ");
+                var path = Console.ReadLine() ?? "";
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                {
+                    Console.WriteLine("[CLIENT] File not found.");
+                    continue;
+                }
+
+                Console.WriteLine($"Folder (suggested: {string.Join(", ", folders)}):");
+                Console.Write("> ");
+                var folder = Console.ReadLine() ?? "";
+
+                var fileName = Path.GetFileName(path);
+                var bytes = await File.ReadAllBytesAsync(path, ct);
+
+                var actor = currentUser ?? "unknown";
+                Console.WriteLine($"[CLIENT user={actor}] Sending file over TLS (encrypted in transit) -> folder={folder}, name={fileName}, bytes={bytes.Length}");
+                await WireProtocol.WriteStringAsync(ssl, "UPLOAD", ct);
+                await WireProtocol.WriteStringAsync(ssl, folder, ct);
+                await WireProtocol.WriteStringAsync(ssl, fileName, ct);
+                await WireProtocol.WriteBytesAsync(ssl, bytes, ct);
+                Console.WriteLine($"[CLIENT user={actor}] Upload payload sent over TLS.");
+
+                var uok = await WireProtocol.ReadBoolAsync(ssl, ct);
+                var umsg = await WireProtocol.ReadStringAsync(ssl, ct);
+                if (!uok)
+                {
+                    Console.WriteLine($"[CLIENT] Upload failed: {umsg}");
+                    continue;
+                }
+
+                var fileId = await WireProtocol.ReadStringAsync(ssl, ct);
+                Console.WriteLine($"[CLIENT user={actor}] Upload OK. fileId={fileId}");
+                continue;
+            }
+
+            if (choice == "4")
+            {
                 Console.Write("FileId: ");
                 var fileId = Console.ReadLine() ?? "";
 
+                var actor = currentUser ?? "unknown";
+                Console.WriteLine($"[CLIENT user={actor}] Requesting download over TLS -> fileId={fileId}");
                 await WireProtocol.WriteStringAsync(ssl, "DOWNLOAD", ct);
                 await WireProtocol.WriteStringAsync(ssl, fileId, ct);
 
@@ -143,16 +189,20 @@ public sealed class ClientApplication
                 }
 
                 var plaintext = await WireProtocol.ReadBytesAsync(ssl, ct) ?? Array.Empty<byte>();
-                var text = System.Text.Encoding.UTF8.GetString(plaintext);
+                Console.WriteLine($"[CLIENT user={actor}] Received file over TLS (bytes={plaintext.Length}).");
+                Console.Write("Save to path (leave empty for ./<fileId>.bin): ");
+                var savePath = Console.ReadLine() ?? "";
+                if (string.IsNullOrWhiteSpace(savePath))
+                {
+                    savePath = Path.Combine(Environment.CurrentDirectory, $"{fileId}.bin");
+                }
 
-                Console.WriteLine("[CLIENT] Download OK. Plaintext content:");
-                Console.WriteLine("----------------------------------------");
-                Console.WriteLine(text);
-                Console.WriteLine("----------------------------------------");
+                await File.WriteAllBytesAsync(savePath, plaintext, ct);
+                Console.WriteLine($"[CLIENT] Saved to {savePath}");
                 continue;
             }
 
-            if (choice == "4")
+            if (choice == "5")
             {
                 await WireProtocol.WriteStringAsync(ssl, "BYE", ct);
                 Console.WriteLine("[CLIENT] Bye.");
@@ -163,6 +213,11 @@ public sealed class ClientApplication
 
     private static string ReadPassword()
     {
+        if (Console.IsInputRedirected)
+        {
+            return Console.ReadLine() ?? "";
+        }
+
         var chars = new List<char>();
         while (true)
         {

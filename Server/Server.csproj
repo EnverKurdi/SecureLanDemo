@@ -5,4 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="certs/server.pfx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

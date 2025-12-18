@@ -6,9 +6,9 @@ public static class WireProtocol
 {
     public static async Task WriteInt32Async(Stream s, int value, CancellationToken ct)
     {
-        Span<byte> buf = stackalloc byte[4];
+        var buf = new byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(buf, value);
-        await s.WriteAsync(buf, ct);
+        await s.WriteAsync(buf, 0, buf.Length, ct);
     }
 
     public static async Task<int> ReadInt32Async(Stream s, CancellationToken ct)
@@ -20,9 +20,9 @@ public static class WireProtocol
 
     public static async Task WriteInt64Async(Stream s, long value, CancellationToken ct)
     {
-        Span<byte> buf = stackalloc byte[8];
+        var buf = new byte[8];
         BinaryPrimitives.WriteInt64LittleEndian(buf, value);
-        await s.WriteAsync(buf, ct);
+        await s.WriteAsync(buf, 0, buf.Length, ct);
     }
 
     public static async Task<long> ReadInt64Async(Stream s, CancellationToken ct)
@@ -33,7 +33,7 @@ public static class WireProtocol
     }
 
     public static Task WriteBoolAsync(Stream s, bool value, CancellationToken ct)
-        => s.WriteAsync(new[] { (byte)(value ? 1 : 0) }, ct);
+        => s.WriteAsync(new[] { (byte)(value ? 1 : 0) }, 0, 1, ct);
 
     public static async Task<bool> ReadBoolAsync(Stream s, CancellationToken ct)
     {
@@ -46,7 +46,7 @@ public static class WireProtocol
     {
         var bytes = System.Text.Encoding.UTF8.GetBytes(value);
         await WriteInt32Async(s, bytes.Length, ct);
-        await s.WriteAsync(bytes, ct);
+        await s.WriteAsync(bytes, 0, bytes.Length, ct);
     }
 
     public static async Task<string> ReadStringAsync(Stream s, CancellationToken ct)
@@ -66,7 +66,7 @@ public static class WireProtocol
             return;
         }
         await WriteInt32Async(s, value.Length, ct);
-        await s.WriteAsync(value, ct);
+        await s.WriteAsync(value, 0, value.Length, ct);
     }
 
     public static async Task<byte[]?> ReadBytesAsync(Stream s, CancellationToken ct)

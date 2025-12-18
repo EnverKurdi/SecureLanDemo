@@ -8,8 +8,16 @@ static int GetPort(string[] args, int fallback)
 }
 
 var port = GetPort(args, 9200);
+var host = GetHost(args, "127.0.0.1");
 
-var client = new ClientApplication("127.0.0.1", port);
+var client = new ClientApplication(host, port);
 await client.RunAsync();
 // See https://aka.ms/new-console-template for more information
 Console.WriteLine("Hello, World!");
+
+static string GetHost(string[] args, string fallback)
+{
+    var idx = Array.FindIndex(args, a => a.Equals("--host", StringComparison.OrdinalIgnoreCase));
+    if (idx >= 0 && idx + 1 < args.Length) return args[idx + 1];
+    return fallback;
+}

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 
 namespace DataStore;
 
@@ -7,6 +8,7 @@ public sealed class DataStoreServer
 {
     private readonly IPAddress _ip;
     private readonly int _port;
+    private readonly string _storageRoot;
 
     private readonly Dictionary<string, FileRecord> _db = new();
 
@@ -14,6 +16,9 @@ public sealed class DataStoreServer
     {
         _ip = IPAddress.Parse(ip);
         _port = port;
+        _storageRoot = ResolveStorageRoot();
+        EnsureStorageFolders();
+        LoadExistingRecords();
     }
 
     public async Task RunAsync(CancellationToken ct = default)
@@ -21,6 +26,7 @@ public sealed class DataStoreServer
         var listener = new TcpListener(_ip, _port);
         listener.Start();
         Console.WriteLine("[DATASTORE] Listening... (stores ciphertext only)");
+        Console.WriteLine($"[DATASTORE] Storage path: {_storageRoot}");
 
         while (!ct.IsCancellationRequested)
         {
@@ -32,7 +38,7 @@ public sealed class DataStoreServer
     private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
     {
         Console.WriteLine("[DATASTORE] Server received connection from AppServer.");
-        await using var _ = client;
+        using var _ = client;
         await using var stream = client.GetStream();
 
         try
@@ -48,9 +54,11 @@ public sealed class DataStoreServer
                     record.CreatedUtcTicks = DateTime.UtcNow.Ticks;
 
                     _db[record.FileId] = record;
+                    PersistRecord(record);
 
                     Console.WriteLine($"[DATASTORE] Saved record: id={record.FileId}, folder={record.Folder}, file={record.FileName}");
                     Console.WriteLine($"[DATASTORE]   Stored bytes (ciphertext) = {record.EncryptedContent.Length} (no plaintext, no DEK).");
+                    Console.WriteLine("[DATASTORE] Ciphertext stored at rest (disk).");
 
                     await WireProtocol.WriteBoolAsync(stream, true, ct);
                     await WireProtocol.WriteStringAsync(stream, record.FileId, ct);
@@ -64,6 +72,7 @@ public sealed class DataStoreServer
                     {
                         await WireProtocol.WriteBoolAsync(stream, true, ct);
                         await WriteRecordAsync(stream, record, ct);
+                        Console.WriteLine($"[DATASTORE] Loaded ciphertext record id={id}.");
                     }
                     else
                     {
@@ -149,5 +158,57 @@ public sealed class DataStoreServer
         await WireProtocol.WriteBytesAsync(s, r.WrappedDekNonce, ct);
         await WireProtocol.WriteBytesAsync(s, r.WrappedDek, ct);
         await WireProtocol.WriteBytesAsync(s, r.WrappedDekTag, ct);
+    }
+
+    private void PersistRecord(FileRecord record)
+    {
+        var folderDir = Path.Combine(_storageRoot, record.Folder);
+        Directory.CreateDirectory(folderDir);
+        var path = Path.Combine(folderDir, $"{record.FileId}.json");
+        var json = JsonSerializer.Serialize(record);
+        File.WriteAllText(path, json);
+    }
+
+    private void LoadExistingRecords()
+    {
+        if (!Directory.Exists(_storageRoot)) return;
+        foreach (var file in Directory.EnumerateFiles(_storageRoot, "*.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var json = File.ReadAllText(file);
+                var record = JsonSerializer.Deserialize<FileRecord>(json);
+                if (record is null || string.IsNullOrWhiteSpace(record.FileId)) continue;
+                _db[record.FileId] = record;
+            }
+            catch
+            {
+                // Ignore corrupted files; datastore should keep running.
+            }
+        }
+    }
+
+    private void EnsureStorageFolders()
+    {
+        Directory.CreateDirectory(_storageRoot);
+        Directory.CreateDirectory(Path.Combine(_storageRoot, "Folder_Group2"));
+        Directory.CreateDirectory(Path.Combine(_storageRoot, "Folder_Group3"));
+    }
+
+    private static string ResolveStorageRoot()
+    {
+        var cwd = Directory.GetCurrentDirectory();
+        if (string.Equals(Path.GetFileName(cwd), "DataStore", StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.Combine(cwd, "storage");
+        }
+
+        var candidate = Path.Combine(cwd, "DataStore", "storage");
+        if (Directory.Exists(Path.Combine(cwd, "DataStore")))
+        {
+            return candidate;
+        }
+
+        return Path.Combine(cwd, "storage");
     }
 }

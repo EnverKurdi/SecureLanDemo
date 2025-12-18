@@ -46,7 +46,7 @@ public sealed class ServerApplication
 
     private async Task HandleClientAsync(TcpClient tcp, CancellationToken ct)
     {
-        await using var _ = tcp;
+        using var _ = tcp;
 
         Console.WriteLine("[SERVER] Client connected. Starting TLS handshake (SslStream)...");
         await using var netStream = tcp.GetStream();
@@ -62,7 +62,7 @@ public sealed class ServerApplication
                 CertificateRevocationCheckMode = X509RevocationMode.NoCheck
             }, ct);
 
-            Console.WriteLine("[SERVER] TLS established (Secure in Transit).");
+            Console.WriteLine("[SERVER] TLS OK (Secure in Transit).");
 
             // Session state
             string? user = null;
@@ -138,7 +138,8 @@ public sealed class ServerApplication
                     var fileName = await WireProtocol.ReadStringAsync(ssl, ct);
                     var contentBytes = await WireProtocol.ReadBytesAsync(ssl, ct) ?? Array.Empty<byte>();
 
-                    Console.WriteLine("[SERVER] Received file over TLS -> decrypting transport into RAM (plaintext in RAM briefly).");
+                    Console.WriteLine($"[SERVER] TLS received upload (encrypted in transit) from {user} -> folder={folder}, name={fileName}, bytes={contentBytes.Length}");
+                    Console.WriteLine("[SERVER] Preparing to encrypt payload at rest (plaintext in RAM briefly).");
 
                     try
                     {
@@ -175,6 +176,7 @@ public sealed class ServerApplication
                     {
                         var plaintext = await _files.LoadFileAsync(user, fileId, ct);
 
+                        Console.WriteLine($"[SERVER] Sending file to {user} over TLS (bytes={plaintext.Length}).");
                         await WireProtocol.WriteBoolAsync(ssl, true, ct);
                         await WireProtocol.WriteStringAsync(ssl, "DOWNLOAD_OK", ct);
                         await WireProtocol.WriteBytesAsync(ssl, plaintext, ct);

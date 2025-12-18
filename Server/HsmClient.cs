@@ -19,6 +19,7 @@ public sealed class HsmClient
         await tcp.ConnectAsync(_ip, _port, ct);
         await using var s = tcp.GetStream();
 
+        Console.WriteLine("[SERVER] -> HSM: WRAP request (DEK).");
         await WireProtocol.WriteStringAsync(s, "WRAP", ct);
         await WireProtocol.WriteBytesAsync(s, dekPlaintext, ct);
 
@@ -29,6 +30,7 @@ public sealed class HsmClient
         var cipher = await WireProtocol.ReadBytesAsync(s, ct) ?? throw new InvalidDataException("cipher missing");
         var tag = await WireProtocol.ReadBytesAsync(s, ct) ?? throw new InvalidDataException("tag missing");
 
+        Console.WriteLine("[SERVER] <- HSM: WRAP response (wrapped DEK).");
         return new CryptoUtils.AesGcmBlob(nonce, cipher, tag);
     }
 
@@ -38,6 +40,7 @@ public sealed class HsmClient
         await tcp.ConnectAsync(_ip, _port, ct);
         await using var s = tcp.GetStream();
 
+        Console.WriteLine("[SERVER] -> HSM: UNWRAP request (wrapped DEK).");
         await WireProtocol.WriteStringAsync(s, "UNWRAP", ct);
         await WireProtocol.WriteBytesAsync(s, nonce, ct);
         await WireProtocol.WriteBytesAsync(s, cipher, ct);
@@ -47,6 +50,7 @@ public sealed class HsmClient
         if (!ok) throw new InvalidOperationException(await WireProtocol.ReadStringAsync(s, ct));
 
         var dek = await WireProtocol.ReadBytesAsync(s, ct) ?? throw new InvalidDataException("DEK missing");
+        Console.WriteLine("[SERVER] <- HSM: UNWRAP response (plaintext DEK).");
         return dek;
     }
 }
