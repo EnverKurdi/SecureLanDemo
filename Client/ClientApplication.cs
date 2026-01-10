@@ -196,9 +196,20 @@ public sealed class ClientApplication
                 {
                     savePath = Path.Combine(Environment.CurrentDirectory, $"{fileId}.bin");
                 }
+                else if (Directory.Exists(savePath))
+                {
+                    savePath = Path.Combine(savePath, $"{fileId}.bin");
+                }
 
-                await File.WriteAllBytesAsync(savePath, plaintext, ct);
-                Console.WriteLine($"[CLIENT] Saved to {savePath}");
+                try
+                {
+                    await File.WriteAllBytesAsync(savePath, plaintext, ct);
+                    Console.WriteLine($"[CLIENT] Saved to {savePath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[CLIENT] Save failed: {ex.Message}");
+                }
                 continue;
             }
 
