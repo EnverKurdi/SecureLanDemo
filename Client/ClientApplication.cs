@@ -16,6 +16,7 @@ public sealed class ClientApplication
 
     public async Task RunAsync(CancellationToken ct = default)
     {
+        Console.WriteLine($"[CLIENT] Connecting to {_ip}:{_port}");
         using var tcp = new TcpClient();
         await tcp.ConnectAsync(_ip, _port, ct);
 
