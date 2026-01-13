@@ -1,5 +1,6 @@
 ﻿using ClientApp;
 
+
 static int GetPort(string[] args, int fallback)
 {
     var idx = Array.FindIndex(args, a => a.Equals("--port", StringComparison.OrdinalIgnoreCase));
@@ -8,7 +9,7 @@ static int GetPort(string[] args, int fallback)
 }
 
 var port = GetPort(args, 9200);
-var host = GetHost(args, "127.0.0.1");
+var host = GetHost(args, "172.20.10.2");
 
 var client = new ClientApplication(host, port);
 await client.RunAsync();
